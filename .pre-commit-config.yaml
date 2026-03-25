@@ -1,0 +1,24 @@
+default_stages: [pre-commit]
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+      - id: trailing-whitespace
+        stages: [pre-commit]
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.5
+    hooks:
+      - id: forbid-crlf
+        stages: [pre-commit]
+        exclude: '(^mvnw\.cmd$|^mvnw$)'
+      - id: remove-crlf
+        stages: [pre-commit]
+        exclude: '(^mvnw\.cmd$|^mvnw$)'
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.15.0
+    hooks:
+      - id: pretty-format-java
+        args: [ --autofix ]
+        exclude: '(^mvnw\.cmd$|^mvnw$)'

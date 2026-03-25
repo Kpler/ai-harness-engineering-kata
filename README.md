@@ -63,6 +63,3 @@ For each step, throw away all code and get back to main, use this prompt, unless
 mvn -q compile
 java -cp target/classes com.kata.warehouse.Main
 ```
-
-
-

@@ -1,0 +1,17 @@
+[settings]
+lockfile = true
+
+[tools]
+java = "openjdk-25"
+maven = "latest"
+pre-commit = "latest"
+python = "latest"
+
+[[hooks.enter]]
+script = '[ -n "${MISE_NO_AUTO_INSTALL}" ] || mise install'
+
+[prepare.pre-commit]
+auto = true
+sources = [".pre-commit-config.yaml"]
+outputs = [".git/hooks/"]
+run = "pre-commit install --overwrite -t pre-push -t pre-commit -t commit-msg"
