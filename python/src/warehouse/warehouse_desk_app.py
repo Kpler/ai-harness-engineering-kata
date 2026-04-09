@@ -19,6 +19,8 @@ class WarehouseDeskApp:
         self._price = {"PEN-BLACK": 1.5, "PEN-BLUE": 1.6, "NOTE-A5": 4.0, "STAPLER": 12.0}
         self._cash_balance = 300.0
         self._next_order_number = 1001
+        self._reservations = {}
+        self._next_reservation_number = 1
 
     def _reserved_qty(self, sku: str) -> int:
         """Returns total qty of active (non-expired) reservations for a sku."""
@@ -90,7 +92,7 @@ class WarehouseDeskApp:
                 return
             if status == "SHIPPED":
                 sku = self._order_sku[order_id]
-                qty = self._order_qty.get(order_id, 0)
+                qty = self._order_qty[order_id]
                 self._stock[sku] = self._stock.get(sku, 0) + qty
                 self._cash_balance -= self._price.get(sku, 0.0) * qty
                 self._order_status[order_id] = "CANCELLED_AFTER_SHIP"
@@ -163,6 +165,8 @@ class WarehouseDeskApp:
             if res is None:
                 self._event_log.append(f"cannot release {reservation_id} because it does not exist")
                 return
+            if res["status"] == "ACTIVE" and time.time() >= res["expiry"]:
+                res["status"] = "EXPIRED"
             if res["status"] != "ACTIVE":
                 self._event_log.append(
                     f"cannot release {reservation_id} from state {res['status']}"

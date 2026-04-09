@@ -315,6 +315,23 @@ class TestRelease:
         app.process_line("RELEASE;R1")
         assert any("cannot release R1 from state RELEASED" in e for e in app._event_log)
 
+    def test_fails_for_confirmed_reservation(self):
+        app = WarehouseDeskApp()
+        app.seed_data()
+        app.process_line("RESERVE;alice;PEN-BLACK;10;5")
+        app.process_line("CONFIRM;R1")
+        app.process_line("RELEASE;R1")
+        assert any("cannot release R1 from state CONFIRMED" in e for e in app._event_log)
+
+    def test_fails_for_expired_reservation(self):
+        app = WarehouseDeskApp()
+        app.seed_data()
+        with patch("time.time", return_value=1000.0):
+            app.process_line("RESERVE;alice;PEN-BLACK;10;1")
+        with patch("time.time", return_value=2000.0):
+            app.process_line("RELEASE;R1")
+        assert any("cannot release R1 from state EXPIRED" in e for e in app._event_log)
+
 
 class TestReservationExpiry:
     def test_expired_reservation_frees_stock_for_sell(self):
@@ -349,3 +366,41 @@ class TestReservationExpiry:
         app.process_line("RESERVE;alice;PEN-BLACK;10;5")
         app.process_line("COUNT;PEN-BLACK")
         assert any("onHand=40" in e and "reserved=10" in e and "available=30" in e for e in app._event_log)
+
+    def test_lazy_expiry_sets_status_to_expired(self):
+        app = WarehouseDeskApp()
+        app.seed_data()
+        with patch("time.time", return_value=1000.0):
+            app.process_line("RESERVE;alice;PEN-BLACK;10;1")
+        with patch("time.time", return_value=2000.0):
+            app._reserved_qty("PEN-BLACK")
+        assert app._reservations["R1"]["status"] == "EXPIRED"
+
+    def test_confirm_and_sell_use_separate_order_ids(self):
+        app = WarehouseDeskApp()
+        app.seed_data()
+        app.process_line("SELL;alice;PEN-BLACK;1")
+        app.process_line("RESERVE;bob;PEN-BLACK;1;5")
+        app.process_line("CONFIRM;R1")
+        assert "O1001" in app._order_status
+        assert "O1002" in app._order_status
+        assert app._order_status["O1001"] == "SHIPPED"
+        assert app._order_status["O1002"] == "SHIPPED"
+
+
+class TestCancelEdgeCases:
+    def test_cancel_cancelled_after_ship_logs_error(self):
+        app = WarehouseDeskApp()
+        app.seed_data()
+        app.process_line("SELL;alice;PEN-BLACK;10")
+        app.process_line("CANCEL;O1001")
+        app.process_line("CANCEL;O1001")
+        assert any("could not be cancelled from state CANCELLED_AFTER_SHIP" in e for e in app._event_log)
+
+
+class TestReserveEdgeCases:
+    def test_reserve_unknown_sku_fails(self):
+        app = WarehouseDeskApp()
+        app.process_line("RESERVE;alice;UNKNOWN-SKU;1;5")
+        assert "R1" not in app._reservations
+        assert any("insufficient stock" in e for e in app._event_log)
