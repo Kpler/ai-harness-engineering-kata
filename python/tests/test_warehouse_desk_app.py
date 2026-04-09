@@ -1,5 +1,5 @@
 import pytest
-from src.warehouse.warehouse_desk_app import WarehouseDeskApp
+from src.warehouse.warehouse_desk_app import Order, OrderStatus, WarehouseDeskApp
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def test_sell_ships_when_stock_available(app):
     app.process_line("SELL;alice;PEN-BLACK;10")
     assert app._stock["PEN-BLACK"] == 30
     assert app._cash_balance == pytest.approx(300.0 + 10 * 1.5)
-    assert app._order_status["O1001"] == "SHIPPED"
+    assert app._orders["O1001"].status == OrderStatus.SHIPPED
     assert app._event_log[-1] == "order O1001 shipped to alice amount=15.0"
 
 
@@ -38,15 +38,15 @@ def test_sell_backordered_when_insufficient_stock(app):
     app.process_line("SELL;bob;STAPLER;5")
     assert app._stock["STAPLER"] == 4  # unchanged
     assert app._cash_balance == 300.0  # unchanged
-    assert app._order_status["O1001"] == "BACKORDER"
+    assert app._orders["O1001"].status == OrderStatus.BACKORDER
     assert app._event_log[-1] == "order O1001 backordered for bob sku=STAPLER qty=5"
 
 
 def test_sell_order_ids_increment(app):
     app.process_line("SELL;alice;PEN-BLACK;1")
     app.process_line("SELL;bob;PEN-BLUE;1")
-    assert "O1001" in app._order_status
-    assert "O1002" in app._order_status
+    assert "O1001" in app._orders
+    assert "O1002" in app._orders
 
 
 # --- CANCEL ---
@@ -59,7 +59,7 @@ def test_cancel_nonexistent_order(app):
 def test_cancel_backorder(app):
     app.process_line("SELL;bob;STAPLER;5")  # O1001 -> BACKORDER
     app.process_line("CANCEL;O1001")
-    assert app._order_status["O1001"] == "CANCELLED"
+    assert app._orders["O1001"].status == OrderStatus.CANCELLED
     assert app._event_log[-1] == "cancelled backorder O1001"
 
 
@@ -68,7 +68,7 @@ def test_cancel_shipped_order_restocks_and_deducts_cash(app):
     app.process_line("CANCEL;O1001")
     assert app._stock["PEN-BLACK"] == 40  # restored
     assert app._cash_balance == pytest.approx(300.0)
-    assert app._order_status["O1001"] == "CANCELLED_AFTER_SHIP"
+    assert app._orders["O1001"].status == OrderStatus.CANCELLED_AFTER_SHIP
     assert app._event_log[-1] == "cancelled shipped order O1001 with restock"
 
 
