@@ -1,21 +1,36 @@
+import time
+
+
 class WarehouseDeskApp:
     def __init__(self):
         self._stock: dict[str, int] = {}
-        self._reserved: dict[str, int] = {}
         self._price: dict[str, float] = {}
         self._order_status: dict[str, str] = {}
         self._order_sku: dict[str, str] = {}
         self._order_qty: dict[str, int] = {}
+        self._reservations: dict[str, dict] = {}
         self._event_log: list[str] = []
         self._cash_balance: float = 0.0
         self._next_order_number: int = 1001
+        self._next_reservation_number: int = 1
 
     def seed_data(self):
         self._stock = {"PEN-BLACK": 40, "PEN-BLUE": 25, "NOTE-A5": 15, "STAPLER": 4}
-        self._reserved = {"PEN-BLACK": 0, "PEN-BLUE": 0, "NOTE-A5": 0, "STAPLER": 0}
         self._price = {"PEN-BLACK": 1.5, "PEN-BLUE": 1.6, "NOTE-A5": 4.0, "STAPLER": 12.0}
         self._cash_balance = 300.0
         self._next_order_number = 1001
+
+    def _reserved_qty(self, sku: str) -> int:
+        """Returns total qty of active (non-expired) reservations for a sku."""
+        now = time.time()
+        for res in self._reservations.values():
+            if res["status"] == "ACTIVE" and now >= res["expiry"]:
+                res["status"] = "EXPIRED"
+        return sum(
+            r["qty"]
+            for r in self._reservations.values()
+            if r["sku"] == sku and r["status"] == "ACTIVE"
+        )
 
     def run_demo_day(self):
         commands = [
@@ -51,14 +66,12 @@ class WarehouseDeskApp:
             self._order_sku[order_id] = sku
             self._order_qty[order_id] = qty
 
-            on_hand = self._stock.get(sku, 0)
-            reserved = self._reserved.get(sku, 0)
-            available = on_hand - reserved
+            available = self._stock.get(sku, 0) - self._reserved_qty(sku)
             if available < qty:
                 self._order_status[order_id] = "BACKORDER"
                 self._event_log.append(f"order {order_id} backordered for {customer} sku={sku} qty={qty}")
             else:
-                self._stock[sku] = on_hand - qty
+                self._stock[sku] = self._stock.get(sku, 0) - qty
                 order_total = self._price.get(sku, 0.0) * qty
                 self._cash_balance += order_total
                 self._order_status[order_id] = "SHIPPED"
@@ -89,7 +102,7 @@ class WarehouseDeskApp:
         if cmd == "COUNT":
             sku = parts[1]
             on_hand = self._stock.get(sku, 0)
-            reserved = self._reserved.get(sku, 0)
+            reserved = self._reserved_qty(sku)
             available = on_hand - reserved
             self._event_log.append(f"count {sku} onHand={on_hand} reserved={reserved} available={available}")
             return
@@ -97,7 +110,7 @@ class WarehouseDeskApp:
         if cmd == "DUMP":
             print("---- dump ----")
             print(f"stock={self._stock}")
-            print(f"reserved={self._reserved}")
+            print(f"reservations={self._reservations}")
             print(f"orders={self._order_status}")
             print(f"cashBalance={self._cash_balance}")
             return
