@@ -107,6 +107,73 @@ class WarehouseDeskApp:
             self._event_log.append(f"count {sku} onHand={on_hand} reserved={reserved} available={available}")
             return
 
+        if cmd == "RESERVE":
+            customer, sku, qty, minutes = parts[1], parts[2], int(parts[3].strip()), int(parts[4].strip())
+            available = self._stock.get(sku, 0) - self._reserved_qty(sku)
+            if available < qty:
+                self._event_log.append(
+                    f"reservation failed for {customer} sku={sku} qty={qty} insufficient stock"
+                )
+                return
+            reservation_id = f"R{self._next_reservation_number}"
+            self._next_reservation_number += 1
+            self._reservations[reservation_id] = {
+                "customer": customer,
+                "sku": sku,
+                "qty": qty,
+                "expiry": time.time() + minutes * 60,
+                "status": "ACTIVE",
+            }
+            self._event_log.append(
+                f"reserved {qty} of {sku} for {customer} reservation={reservation_id} expires_in={minutes}min"
+            )
+            return
+
+        if cmd == "CONFIRM":
+            reservation_id = parts[1]
+            res = self._reservations.get(reservation_id)
+            if res is None:
+                self._event_log.append(f"cannot confirm {reservation_id} because it does not exist")
+                return
+            if res["status"] == "ACTIVE" and time.time() >= res["expiry"]:
+                res["status"] = "EXPIRED"
+            if res["status"] != "ACTIVE":
+                self._event_log.append(
+                    f"cannot confirm {reservation_id} from state {res['status']}"
+                )
+                return
+            res["status"] = "CONFIRMED"
+            sku, qty, customer = res["sku"], res["qty"], res["customer"]
+            order_id = f"O{self._next_order_number}"
+            self._next_order_number += 1
+            self._order_sku[order_id] = sku
+            self._order_qty[order_id] = qty
+            self._stock[sku] = self._stock.get(sku, 0) - qty
+            order_total = self._price.get(sku, 0.0) * qty
+            self._cash_balance += order_total
+            self._order_status[order_id] = "SHIPPED"
+            self._event_log.append(
+                f"confirmed reservation {reservation_id} order {order_id} shipped to {customer} amount={order_total}"
+            )
+            return
+
+        if cmd == "RELEASE":
+            reservation_id = parts[1]
+            res = self._reservations.get(reservation_id)
+            if res is None:
+                self._event_log.append(f"cannot release {reservation_id} because it does not exist")
+                return
+            if res["status"] != "ACTIVE":
+                self._event_log.append(
+                    f"cannot release {reservation_id} from state {res['status']}"
+                )
+                return
+            res["status"] = "RELEASED"
+            self._event_log.append(
+                f"released reservation {reservation_id} sku={res['sku']} qty={res['qty']}"
+            )
+            return
+
         if cmd == "DUMP":
             print("---- dump ----")
             print(f"stock={self._stock}")
